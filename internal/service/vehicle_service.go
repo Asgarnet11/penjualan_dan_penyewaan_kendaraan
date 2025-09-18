@@ -11,7 +11,7 @@ import (
 
 type VehicleService interface {
 	CreateVehicle(ctx context.Context, input model.CreateVehicleInput, ownerID uuid.UUID) (model.Vehicle, error)
-	GetAllVehicles(ctx context.Context) ([]model.Vehicle, error)
+	GetAllVehicles(ctx context.Context, filter model.VehicleFilter) ([]model.Vehicle, error)
 	GetVehicleByID(ctx context.Context, id uuid.UUID) (model.Vehicle, error)
 	UpdateVehicle(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID, input model.CreateVehicleInput) (model.Vehicle, error)
 	DeleteVehicle(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID) error
@@ -57,8 +57,8 @@ func (s *vehicleService) CreateVehicle(ctx context.Context, input model.CreateVe
 	return createdVehicle, nil
 }
 
-func (s *vehicleService) GetAllVehicles(ctx context.Context) ([]model.Vehicle, error) {
-	return s.repo.FindAll(ctx)
+func (s *vehicleService) GetAllVehicles(ctx context.Context, filter model.VehicleFilter) ([]model.Vehicle, error) { // <-- Gunakan model.VehicleFilter
+	return s.repo.FindAll(ctx, filter)
 }
 
 func (s *vehicleService) GetVehicleByID(ctx context.Context, id uuid.UUID) (model.Vehicle, error) {

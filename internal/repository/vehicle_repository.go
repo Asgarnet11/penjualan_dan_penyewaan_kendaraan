@@ -2,27 +2,29 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sultra-otomotif-api/internal/model"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Ini adalah interface yang akan digunakan oleh service
+// VehicleRepository adalah interface yang akan digunakan oleh service
 type VehicleRepository interface {
 	Create(ctx context.Context, vehicle model.Vehicle) (model.Vehicle, error)
-	FindAll(ctx context.Context) ([]model.Vehicle, error)
+	FindAll(ctx context.Context, filter model.VehicleFilter) ([]model.Vehicle, error)
 	FindByID(ctx context.Context, id uuid.UUID) (model.Vehicle, error)
 	Update(ctx context.Context, vehicle model.Vehicle) (model.Vehicle, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
-// Ini adalah implementasi dari interface di atas
+// vehicleRepository adalah implementasi dari interface di atas
 type vehicleRepository struct {
 	db *pgxpool.Pool
 }
 
-// INI FUNGSI YANG HILANG: NewVehicleRepository
+// NewVehicleRepository adalah constructor untuk vehicleRepository
 func NewVehicleRepository(db *pgxpool.Pool) VehicleRepository {
 	return &vehicleRepository{db: db}
 }
@@ -40,11 +42,65 @@ func (r *vehicleRepository) Create(ctx context.Context, v model.Vehicle) (model.
 	return v, nil
 }
 
-func (r *vehicleRepository) FindAll(ctx context.Context) ([]model.Vehicle, error) {
+// FindAll telah dimodifikasi untuk membangun query secara dinamis berdasarkan filter
+func (r *vehicleRepository) FindAll(ctx context.Context, filter model.VehicleFilter) ([]model.Vehicle, error) {
 	var vehicles []model.Vehicle
-	query := `SELECT id, owner_id, brand, model, year, plate_number, color, vehicle_type, transmission, fuel, status, description, is_for_sale, sale_price, is_for_rent, rental_price_daily, rental_price_weekly, rental_price_monthly, created_at, updated_at FROM vehicles`
+	baseQuery := `SELECT id, owner_id, brand, model, year, plate_number, color, vehicle_type, transmission, fuel, status, description, is_for_sale, sale_price, is_for_rent, rental_price_daily, rental_price_weekly, rental_price_monthly, created_at, updated_at FROM vehicles WHERE status = 'available'`
 
-	rows, err := r.db.Query(ctx, query)
+	conditions := []string{}
+	args := []interface{}{}
+	argID := 1
+
+	if filter.Type != "" {
+		conditions = append(conditions, fmt.Sprintf("vehicle_type = $%d", argID))
+		args = append(args, filter.Type)
+		argID++
+	}
+	if filter.Brand != "" {
+		conditions = append(conditions, fmt.Sprintf("brand ILIKE $%d", argID))
+		args = append(args, "%"+filter.Brand+"%")
+		argID++
+	}
+	if filter.Transmission != "" {
+		conditions = append(conditions, fmt.Sprintf("transmission = $%d", argID))
+		args = append(args, filter.Transmission)
+		argID++
+	}
+	if filter.MinYear > 0 {
+		conditions = append(conditions, fmt.Sprintf("year >= $%d", argID))
+		args = append(args, filter.MinYear)
+		argID++
+	}
+	if filter.MaxPrice > 0 {
+		conditions = append(conditions, fmt.Sprintf("sale_price <= $%d", argID))
+		args = append(args, filter.MaxPrice)
+		argID++
+	}
+	if filter.Search != "" {
+		conditions = append(conditions, fmt.Sprintf("(brand ILIKE $%d OR model ILIKE $%d)", argID, argID))
+		args = append(args, "%"+filter.Search+"%")
+		argID++
+	}
+
+	// Gabungkan semua kondisi filter ke query utama
+	if len(conditions) > 0 {
+		baseQuery += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	// Tambahkan sorting
+	orderBy := " ORDER BY created_at DESC" // Urutan default
+	switch filter.Sort {
+	case "price_asc":
+		orderBy = " ORDER BY sale_price ASC"
+	case "price_desc":
+		orderBy = " ORDER BY sale_price DESC"
+	case "year_desc":
+		orderBy = " ORDER BY year DESC"
+	}
+	baseQuery += orderBy
+
+	// Eksekusi query yang sudah dibangun secara dinamis
+	rows, err := r.db.Query(ctx, baseQuery, args...)
 	if err != nil {
 		return nil, err
 	}

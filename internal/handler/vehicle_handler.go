@@ -39,9 +39,15 @@ func (h *VehicleHandler) CreateVehicle(ctx *gin.Context) {
 }
 
 func (h *VehicleHandler) GetAllVehicles(ctx *gin.Context) {
-	vehicles, err := h.vehicleService.GetAllVehicles(ctx)
+	var filter model.VehicleFilter // <-- Gunakan model.VehicleFilter
+	if err := ctx.ShouldBindQuery(&filter); err != nil {
+		helper.ErrorResponse(ctx, "Invalid filter parameters", http.StatusBadRequest, err)
+		return
+	}
+
+	vehicles, err := h.vehicleService.GetAllVehicles(ctx, filter)
 	if err != nil {
-		helper.ErrorResponse(ctx, err.Error(), http.StatusInternalServerError, err)
+		helper.ErrorResponse(ctx, "Failed to fetch all vehicles", http.StatusInternalServerError, err)
 		return
 	}
 	helper.APIResponse(ctx, "Successfully fetched all vehicles", http.StatusOK, vehicles)
