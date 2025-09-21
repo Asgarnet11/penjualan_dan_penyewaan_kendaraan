@@ -8,6 +8,7 @@ import (
 	"sultra-otomotif-api/internal/middleware"
 	"sultra-otomotif-api/internal/repository"
 	"sultra-otomotif-api/internal/service"
+	"sultra-otomotif-api/internal/websocket"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,6 +17,9 @@ import (
 func main() {
 
 	cfg := config.LoadConfig()
+
+	hub := websocket.NewHub()
+	go hub.Run()
 
 	// 2. Connect to the Database
 	db, err := pgxpool.New(context.Background(), cfg.DBSource)
@@ -32,6 +36,7 @@ func main() {
 	imageRepository := repository.NewImageRepository(db)
 	bookingRepository := repository.NewBookingRepository(db)
 	reviewRepository := repository.NewReviewRepository(db)
+	salesRepository := repository.NewSalesRepository(db)
 
 	// --- SERVICES ---
 	userService := service.NewUserService(userRepository)
@@ -39,6 +44,7 @@ func main() {
 	bookingService := service.NewBookingService(bookingRepository, vehicleRepository)
 	reviewService := service.NewReviewService(reviewRepository, bookingRepository)
 	adminService := service.NewAdminService(userRepository, vehicleRepository)
+	salesService := service.NewSalesService(salesRepository, vehicleRepository)
 
 	// --- HANDLERS ---
 	userHandler := handler.NewUserHandler(userService, cfg.JWTSecretKey)
@@ -46,6 +52,7 @@ func main() {
 	bookingHandler := handler.NewBookingHandler(bookingService)
 	reviewHandler := handler.NewReviewHandler(reviewService)
 	adminHandler := handler.NewAdminHandler(adminService)
+	salesHandler := handler.NewSalesHandler(salesService)
 
 	// 4. Setup Router Gin
 	router := gin.Default()
@@ -57,6 +64,11 @@ func main() {
 	setupPaymentRoutes(apiV1, bookingHandler)
 	setupReviewRoutes(apiV1, reviewHandler, cfg.JWTSecretKey)
 	setupAdminRoutes(apiV1, adminHandler, cfg.JWTSecretKey)
+	setupSalesRoutes(apiV1, salesHandler, cfg.JWTSecretKey)
+
+	apiV1.GET("/ws", middleware.AuthMiddleware(cfg.JWTSecretKey), func(c *gin.Context) {
+		handler.ServeWs(hub, c)
+	})
 
 	// 6. Menjalankan Server
 	log.Printf("Server starting on port %s", cfg.AppPort)
@@ -150,4 +162,24 @@ func setupAdminRoutes(group *gin.RouterGroup, handler *handler.AdminHandler, jwt
 		adminRoutes.GET("/vehicles", handler.GetAllVehicles)
 		adminRoutes.DELETE("/vehicles/:id", handler.DeleteVehicle)
 	}
+}
+
+func setupSalesRoutes(group *gin.RouterGroup, handler *handler.SalesHandler, jwtSecret string) {
+	salesRoutes := group.Group("/sales")
+	salesRoutes.Use(middleware.AuthMiddleware(jwtSecret))
+	{
+		// Rute untuk melihat riwayat pembelian (customer) & penjualan (vendor)
+		salesRoutes.GET("/purchases", middleware.RoleMiddleware("customer"), handler.GetMyPurchases)
+		salesRoutes.GET("/sales", middleware.RoleMiddleware("vendor"), handler.GetMySales)
+	}
+
+	// Rute untuk customer memulai pembelian sebuah mobil
+	purchaseRoutes := group.Group("/vehicles/:id/purchase")
+	purchaseRoutes.Use(middleware.AuthMiddleware(jwtSecret), middleware.RoleMiddleware("customer"))
+	{
+		purchaseRoutes.POST("/", handler.InitiatePurchase)
+	}
+
+	// Rute callback pembayaran (mirip booking)
+	group.POST("/sales/callback", handler.PaymentCallback)
 }

@@ -9,9 +9,10 @@ import (
 
 // Config menampung semua konfigurasi aplikasi
 type Config struct {
-	DBSource     string
-	JWTSecretKey string
-	AppPort      string
+	DBSource      string
+	JWTSecretKey  string
+	AppPort       string
+	CloudinaryURL string
 }
 
 // LoadConfig membaca konfigurasi dari file .env
@@ -22,8 +23,9 @@ func LoadConfig() Config {
 	}
 
 	return Config{
-		DBSource:     os.Getenv("DB_SOURCE"),
-		JWTSecretKey: os.Getenv("JWT_SECRET_KEY"),
-		AppPort:      os.Getenv("APP_PORT"),
+		DBSource:      os.Getenv("DB_SOURCE"),
+		JWTSecretKey:  os.Getenv("JWT_SECRET_KEY"),
+		AppPort:       os.Getenv("APP_PORT"),
+		CloudinaryURL: os.Getenv("CLOUDINARY_URL"),
 	}
 }

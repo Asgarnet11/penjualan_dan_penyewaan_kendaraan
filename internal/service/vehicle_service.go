@@ -3,8 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"mime/multipart"
+	"sultra-otomotif-api/internal/config"
 	"sultra-otomotif-api/internal/model"
 	"sultra-otomotif-api/internal/repository"
+
+	"github.com/cloudinary/cloudinary-go/v2"
+	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 
 	"github.com/google/uuid"
 )
@@ -15,7 +20,7 @@ type VehicleService interface {
 	GetVehicleByID(ctx context.Context, id uuid.UUID) (model.Vehicle, error)
 	UpdateVehicle(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID, input model.CreateVehicleInput) (model.Vehicle, error)
 	DeleteVehicle(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID) error
-	UploadImage(ctx context.Context, vehicleID, currentUserID uuid.UUID, filename string) (string, error)
+	UploadImage(ctx context.Context, vehicleID, currentUserID uuid.UUID, file multipart.File) (string, error)
 }
 
 type vehicleService struct {
@@ -127,8 +132,8 @@ func (s *vehicleService) DeleteVehicle(ctx context.Context, id uuid.UUID, curren
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *vehicleService) UploadImage(ctx context.Context, vehicleID, currentUserID uuid.UUID, filename string) (string, error) {
-	// 1. Validasi kepemilikan kendaraan
+func (s *vehicleService) UploadImage(ctx context.Context, vehicleID, currentUserID uuid.UUID, file multipart.File) (string, error) {
+	// 1. Validasi kepemilikan (sama seperti sebelumnya)
 	vehicle, err := s.repo.FindByID(ctx, vehicleID)
 	if err != nil {
 		return "", errors.New("vehicle not found")
@@ -137,12 +142,25 @@ func (s *vehicleService) UploadImage(ctx context.Context, vehicleID, currentUser
 		return "", errors.New("forbidden: you are not the owner of this vehicle")
 	}
 
-	// 2. (SIMULASI) Proses upload ke cloud
-	// Di aplikasi nyata, di sinilah kode untuk upload ke AWS S3, dll.
-	// Untuk sekarang, kita buat URL placeholder.
-	imageURL := "https://storage.googleapis.com/sultra-otomotif-bucket/images/" + filename
+	// 2. Setup koneksi ke Cloudinary
+	cfg := config.LoadConfig() // Muat config untuk mendapatkan URL
+	cld, err := cloudinary.NewFromURL(cfg.CloudinaryURL)
+	if err != nil {
+		return "", errors.New("failed to connect to cloudinary")
+	}
 
-	// 3. Simpan URL ke database
+	// 3. Lakukan proses upload
+	uploadResult, err := cld.Upload.Upload(ctx, file, uploader.UploadParams{
+		Folder: "sultra-otomotif", // Tentukan folder di Cloudinary
+	})
+	if err != nil {
+		return "", errors.New("failed to upload image to cloudinary")
+	}
+
+	// 4. Dapatkan URL gambar yang aman
+	imageURL := uploadResult.SecureURL
+
+	// 5. Simpan URL ke database (sama seperti sebelumnya)
 	err = s.imageRepo.SaveVehicleImage(ctx, vehicleID, imageURL)
 	if err != nil {
 		return "", err

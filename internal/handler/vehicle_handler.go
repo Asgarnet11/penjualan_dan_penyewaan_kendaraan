@@ -130,24 +130,27 @@ func (h *VehicleHandler) UploadVehicleImage(ctx *gin.Context) {
 
 	currentUserID := ctx.MustGet("currentUserID").(uuid.UUID)
 
-	// Ambil file dari form request
-	file, err := ctx.FormFile("image")
+	fileHeader, err := ctx.FormFile("image")
 	if err != nil {
 		helper.ErrorResponse(ctx, "Image file is required", http.StatusBadRequest, err)
 		return
 	}
 
-	// (Opsional) Validasi tipe file dan ukuran
-	// ...
-	filename := uuid.New().String() + "-" + file.Filename
+	file, err := fileHeader.Open()
+	if err != nil {
+		helper.ErrorResponse(ctx, "Failed to open image file", http.StatusInternalServerError, err)
+		return
+	}
 
-	// Panggil service untuk memproses upload
-	imageURL, err := h.vehicleService.UploadImage(ctx, vehicleID, currentUserID, filename)
+	defer file.Close() // Pastikan file ditutup setelah selesai
+
+	// Panggil service dengan file stream, bukan fileHeader atau filename
+	imageURL, err := h.vehicleService.UploadImage(ctx, vehicleID, currentUserID, file)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "forbidden") {
 			helper.ErrorResponse(ctx, err.Error(), http.StatusForbidden, err)
 		} else {
-			helper.ErrorResponse(ctx, err.Error(), http.StatusNotFound, err)
+			helper.ErrorResponse(ctx, err.Error(), http.StatusInternalServerError, err)
 		}
 		return
 	}
