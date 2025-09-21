@@ -27,7 +27,6 @@ func main() {
 	// 3. Inisialisasi Semua Layer (Dependency Injection)
 
 	// --- REPOSITORIES ---
-	// Inisialisasi semua repository yang berinteraksi langsung dengan database.
 	userRepository := repository.NewUserRepository(db)
 	vehicleRepository := repository.NewVehicleRepository(db)
 	imageRepository := repository.NewImageRepository(db)
@@ -36,15 +35,17 @@ func main() {
 
 	// --- SERVICES ---
 	userService := service.NewUserService(userRepository)
-	vehicleService := service.NewVehicleService(vehicleRepository, imageRepository)
+	vehicleService := service.NewVehicleService(vehicleRepository, imageRepository, userRepository)
 	bookingService := service.NewBookingService(bookingRepository, vehicleRepository)
 	reviewService := service.NewReviewService(reviewRepository, bookingRepository)
+	adminService := service.NewAdminService(userRepository, vehicleRepository)
 
 	// --- HANDLERS ---
 	userHandler := handler.NewUserHandler(userService, cfg.JWTSecretKey)
 	vehicleHandler := handler.NewVehicleHandler(vehicleService)
 	bookingHandler := handler.NewBookingHandler(bookingService)
 	reviewHandler := handler.NewReviewHandler(reviewService)
+	adminHandler := handler.NewAdminHandler(adminService)
 
 	// 4. Setup Router Gin
 	router := gin.Default()
@@ -55,6 +56,7 @@ func main() {
 	setupBookingRoutes(apiV1, bookingHandler, cfg.JWTSecretKey)
 	setupPaymentRoutes(apiV1, bookingHandler)
 	setupReviewRoutes(apiV1, reviewHandler, cfg.JWTSecretKey)
+	setupAdminRoutes(apiV1, adminHandler, cfg.JWTSecretKey)
 
 	// 6. Menjalankan Server
 	log.Printf("Server starting on port %s", cfg.AppPort)
@@ -129,5 +131,23 @@ func setupReviewRoutes(group *gin.RouterGroup, handler *handler.ReviewHandler, j
 	reviewCreationRoutes.Use(middleware.AuthMiddleware(jwtSecret), middleware.RoleMiddleware("customer"))
 	{
 		reviewCreationRoutes.POST("/", handler.CreateReview)
+	}
+}
+
+func setupAdminRoutes(group *gin.RouterGroup, handler *handler.AdminHandler, jwtSecret string) {
+	adminRoutes := group.Group("/admin")
+	adminRoutes.Use(middleware.AuthMiddleware(jwtSecret), middleware.RoleMiddleware("admin"))
+	{
+		// Rute Manajemen Vendor
+		adminRoutes.GET("/vendors", handler.GetVendors)
+		adminRoutes.PATCH("/vendors/:id/verify", handler.VerifyVendor)
+
+		// Rute Manajemen User (BARU)
+		adminRoutes.GET("/users", handler.GetAllUsers)
+		adminRoutes.DELETE("/users/:id", handler.DeleteUser)
+
+		// Rute Manajemen Listing (BARU)
+		adminRoutes.GET("/vehicles", handler.GetAllVehicles)
+		adminRoutes.DELETE("/vehicles/:id", handler.DeleteVehicle)
 	}
 }

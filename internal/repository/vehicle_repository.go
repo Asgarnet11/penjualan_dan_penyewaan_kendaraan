@@ -17,6 +17,7 @@ type VehicleRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (model.Vehicle, error)
 	Update(ctx context.Context, vehicle model.Vehicle) (model.Vehicle, error)
 	Delete(ctx context.Context, id uuid.UUID) error
+	FindAllAdmin(ctx context.Context) ([]model.Vehicle, error)
 }
 
 // vehicleRepository adalah implementasi dari interface di atas
@@ -146,4 +147,26 @@ func (r *vehicleRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM vehicles WHERE id = $1`
 	_, err := r.db.Exec(ctx, query, id)
 	return err
+}
+
+func (r *vehicleRepository) FindAllAdmin(ctx context.Context) ([]model.Vehicle, error) {
+	var vehicles []model.Vehicle
+	// Query ini tidak memiliki 'WHERE status = 'available''
+	query := `SELECT id, owner_id, brand, model, year, status, created_at FROM vehicles ORDER BY created_at DESC`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var v model.Vehicle
+		// Scan hanya untuk field yang kita SELECT
+		if err := rows.Scan(&v.ID, &v.OwnerID, &v.Brand, &v.Model, &v.Year, &v.Status, &v.CreatedAt); err != nil {
+			return nil, err
+		}
+		vehicles = append(vehicles, v)
+	}
+	return vehicles, nil
 }

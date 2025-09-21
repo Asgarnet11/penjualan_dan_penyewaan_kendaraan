@@ -21,13 +21,23 @@ type VehicleService interface {
 type vehicleService struct {
 	repo      repository.VehicleRepository
 	imageRepo repository.ImageRepository
+	userRepo  repository.UserRepository
 }
 
-func NewVehicleService(repo repository.VehicleRepository, imageRepo repository.ImageRepository) VehicleService {
-	return &vehicleService{repo: repo, imageRepo: imageRepo}
+func NewVehicleService(repo repository.VehicleRepository, imageRepo repository.ImageRepository, userRepo repository.UserRepository) VehicleService {
+	return &vehicleService{repo: repo, imageRepo: imageRepo, userRepo: userRepo}
 }
 
 func (s *vehicleService) CreateVehicle(ctx context.Context, input model.CreateVehicleInput, ownerID uuid.UUID) (model.Vehicle, error) {
+
+	owner, err := s.userRepo.FindByID(ctx, ownerID) // Kita perlu fungsi FindByID di userRepo
+	if err != nil {
+		return model.Vehicle{}, errors.New("owner not found")
+	}
+	if !owner.IsVerified {
+		return model.Vehicle{}, errors.New("forbidden: vendor account is not verified")
+	}
+
 	newVehicle := model.Vehicle{
 		ID:                 uuid.New(),
 		OwnerID:            ownerID, // Diambil dari token JWT
