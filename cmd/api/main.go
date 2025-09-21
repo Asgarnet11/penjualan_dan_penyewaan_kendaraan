@@ -10,6 +10,8 @@ import (
 	"sultra-otomotif-api/internal/service"
 	"sultra-otomotif-api/internal/websocket"
 
+	"github.com/gin-contrib/cors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -56,6 +58,7 @@ func main() {
 
 	// 4. Setup Router Gin
 	router := gin.Default()
+	router.Use(cors.Default())
 	apiV1 := router.Group("/api/v1")
 
 	setupAuthRoutes(apiV1, userHandler)
