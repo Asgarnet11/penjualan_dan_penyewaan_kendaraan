@@ -3,6 +3,8 @@ package websocket
 import (
 	"log"
 
+	"sultra-otomotif-api/internal/model"
+
 	"github.com/google/uuid"
 	ws "github.com/gorilla/websocket"
 )
@@ -20,12 +22,17 @@ func (c *Client) ReadPump() {
 		c.Conn.Close()
 	}()
 	for {
-		_, message, err := c.Conn.ReadMessage()
+		var msg model.Message
+
+		err := c.Conn.ReadJSON(&msg)
 		if err != nil {
-			log.Printf("error reading message: %v", err)
+			log.Printf("error reading json: %v", err)
 			break
 		}
-		c.Hub.Broadcast <- message
+
+		msg.SenderID = c.ID
+
+		c.Hub.Broadcast <- &msg
 	}
 }
 

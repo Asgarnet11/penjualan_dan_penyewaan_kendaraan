@@ -18,17 +18,12 @@ func main() {
 
 	cfg := config.LoadConfig()
 
-	hub := websocket.NewHub()
-	go hub.Run()
-
-	// 2. Connect to the Database
 	db, err := pgxpool.New(context.Background(), cfg.DBSource)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	}
 	defer db.Close()
 	log.Println("Database connection successful")
-	// 3. Inisialisasi Semua Layer (Dependency Injection)
 
 	// --- REPOSITORIES ---
 	userRepository := repository.NewUserRepository(db)
@@ -37,6 +32,7 @@ func main() {
 	bookingRepository := repository.NewBookingRepository(db)
 	reviewRepository := repository.NewReviewRepository(db)
 	salesRepository := repository.NewSalesRepository(db)
+	chatRepository := repository.NewChatRepository(db)
 
 	// --- SERVICES ---
 	userService := service.NewUserService(userRepository)
@@ -45,6 +41,7 @@ func main() {
 	reviewService := service.NewReviewService(reviewRepository, bookingRepository)
 	adminService := service.NewAdminService(userRepository, vehicleRepository)
 	salesService := service.NewSalesService(salesRepository, vehicleRepository)
+	chatService := service.NewChatService(chatRepository)
 
 	// --- HANDLERS ---
 	userHandler := handler.NewUserHandler(userService, cfg.JWTSecretKey)
@@ -53,6 +50,9 @@ func main() {
 	reviewHandler := handler.NewReviewHandler(reviewService)
 	adminHandler := handler.NewAdminHandler(adminService)
 	salesHandler := handler.NewSalesHandler(salesService)
+
+	hub := websocket.NewHub(chatService)
+	go hub.Run()
 
 	// 4. Setup Router Gin
 	router := gin.Default()
