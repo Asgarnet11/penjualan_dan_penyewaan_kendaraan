@@ -15,7 +15,7 @@ type Hub struct {
 	Broadcast   chan *model.Message
 	Register    chan *Client
 	Unregister  chan *Client
-	chatService service.ChatService // <-- Inject service untuk interaksi DB
+	chatService service.ChatService
 }
 
 func NewHub(chatService service.ChatService) *Hub {

@@ -41,8 +41,7 @@ func main() {
 	reviewService := service.NewReviewService(reviewRepository, bookingRepository)
 	adminService := service.NewAdminService(userRepository, vehicleRepository)
 	salesService := service.NewSalesService(salesRepository, vehicleRepository)
-	chatService := service.NewChatService(chatRepository)
-
+	chatService := service.NewChatService(chatRepository, vehicleRepository)
 	// --- HANDLERS ---
 	userHandler := handler.NewUserHandler(userService, cfg.JWTSecretKey)
 	vehicleHandler := handler.NewVehicleHandler(vehicleService)
@@ -50,6 +49,7 @@ func main() {
 	reviewHandler := handler.NewReviewHandler(reviewService)
 	adminHandler := handler.NewAdminHandler(adminService)
 	salesHandler := handler.NewSalesHandler(salesService)
+	chatHandler := handler.NewChatHandler(chatService)
 
 	hub := websocket.NewHub(chatService)
 	go hub.Run()
@@ -65,6 +65,7 @@ func main() {
 	setupReviewRoutes(apiV1, reviewHandler, cfg.JWTSecretKey)
 	setupAdminRoutes(apiV1, adminHandler, cfg.JWTSecretKey)
 	setupSalesRoutes(apiV1, salesHandler, cfg.JWTSecretKey)
+	setupChatRoutes(apiV1, chatHandler, cfg.JWTSecretKey)
 
 	apiV1.GET("/ws", middleware.AuthMiddleware(cfg.JWTSecretKey), func(c *gin.Context) {
 		handler.ServeWs(hub, c)
@@ -182,4 +183,20 @@ func setupSalesRoutes(group *gin.RouterGroup, handler *handler.SalesHandler, jwt
 
 	// Rute callback pembayaran (mirip booking)
 	group.POST("/sales/callback", handler.PaymentCallback)
+}
+
+func setupChatRoutes(group *gin.RouterGroup, handler *handler.ChatHandler, jwtSecret string) {
+	chatRoutes := group.Group("/conversations")
+	chatRoutes.Use(middleware.AuthMiddleware(jwtSecret))
+	{
+		chatRoutes.GET("/", handler.ListConversations)
+		chatRoutes.GET("/:id/messages", handler.GetMessages)
+	}
+
+	// Rute untuk memulai percakapan
+	startChatRoutes := group.Group("/vehicles/:id/conversations")
+	startChatRoutes.Use(middleware.AuthMiddleware(jwtSecret), middleware.RoleMiddleware("customer"))
+	{
+		startChatRoutes.POST("/", handler.StartConversation)
+	}
 }
