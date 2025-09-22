@@ -7,6 +7,7 @@ import (
 	"sultra-otomotif-api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type UserHandler struct {
@@ -62,4 +63,15 @@ func (h *UserHandler) Login(ctx *gin.Context) {
 
 	tokenResponse := model.AuthResponse{Token: token}
 	helper.APIResponse(ctx, "Login successful", http.StatusOK, tokenResponse)
+}
+
+func (h *UserHandler) GetMe(ctx *gin.Context) {
+	currentUserID := ctx.MustGet("currentUserID").(uuid.UUID)
+
+	user, err := h.userService.GetUserByID(ctx, currentUserID)
+	if err != nil {
+		helper.ErrorResponse(ctx, "Failed to get user profile", http.StatusNotFound, err)
+		return
+	}
+	helper.APIResponse(ctx, "Successfully fetched user profile", http.StatusOK, user)
 }

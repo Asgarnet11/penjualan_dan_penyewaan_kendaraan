@@ -9,6 +9,7 @@ import (
 	"sultra-otomotif-api/internal/repository"
 	"sultra-otomotif-api/internal/service"
 	"sultra-otomotif-api/internal/websocket"
+	"time"
 
 	"github.com/gin-contrib/cors"
 
@@ -56,12 +57,20 @@ func main() {
 	hub := websocket.NewHub(chatService)
 	go hub.Run()
 
-	// 4. Setup Router Gin
 	router := gin.Default()
-	router.Use(cors.Default())
+	config := cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}
+	router.Use(cors.New(config))
+
 	apiV1 := router.Group("/api/v1")
 
-	setupAuthRoutes(apiV1, userHandler)
+	setupAuthRoutes(apiV1, userHandler, cfg.JWTSecretKey)
 	setupVehicleRoutes(apiV1, vehicleHandler, cfg.JWTSecretKey)
 	setupBookingRoutes(apiV1, bookingHandler, cfg.JWTSecretKey)
 	setupPaymentRoutes(apiV1, bookingHandler)
@@ -83,11 +92,12 @@ func main() {
 }
 
 // setupAuthRoutes mendaftarkan semua rute yang berhubungan dengan autentikasi.
-func setupAuthRoutes(group *gin.RouterGroup, handler *handler.UserHandler) {
+func setupAuthRoutes(group *gin.RouterGroup, handler *handler.UserHandler, jwtSecret string) {
 	authRoutes := group.Group("/auth")
 	{
 		authRoutes.POST("/register", handler.Register)
 		authRoutes.POST("/login", handler.Login)
+		authRoutes.GET("/me", middleware.AuthMiddleware(jwtSecret), handler.GetMe)
 	}
 }
 

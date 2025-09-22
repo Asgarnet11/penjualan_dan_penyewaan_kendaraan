@@ -15,6 +15,7 @@ import (
 type UserService interface {
 	RegisterUser(ctx context.Context, input model.RegisterUserInput) (model.User, error)
 	LoginUser(ctx context.Context, input model.LoginUserInput, jwtSecret string) (string, error)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (model.User, error)
 }
 
 type userService struct {
@@ -77,4 +78,8 @@ func (s *userService) LoginUser(ctx context.Context, input model.LoginUserInput,
 	}
 
 	return token, nil
+}
+
+func (s *userService) GetUserByID(ctx context.Context, userID uuid.UUID) (model.User, error) {
+	return s.repo.FindByID(ctx, userID)
 }
