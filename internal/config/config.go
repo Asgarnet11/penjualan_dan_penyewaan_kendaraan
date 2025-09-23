@@ -1,3 +1,4 @@
+// File: internal/config/config.go
 package config
 
 import (
@@ -7,15 +8,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config menampung semua konfigurasi aplikasi
 type Config struct {
 	DBSource      string
 	JWTSecretKey  string
 	AppPort       string
 	CloudinaryURL string
+	FrontendURL   string
 }
 
-// LoadConfig membaca konfigurasi dari file .env
 func LoadConfig() Config {
 	err := godotenv.Load()
 	if err != nil {
@@ -27,5 +27,6 @@ func LoadConfig() Config {
 		JWTSecretKey:  os.Getenv("JWT_SECRET_KEY"),
 		AppPort:       os.Getenv("APP_PORT"),
 		CloudinaryURL: os.Getenv("CLOUDINARY_URL"),
+		FrontendURL:   os.Getenv("FRONTEND_URL"),
 	}
 }

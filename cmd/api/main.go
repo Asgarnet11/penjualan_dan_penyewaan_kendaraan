@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
+	"os"
 	"sultra-otomotif-api/internal/config"
 	"sultra-otomotif-api/internal/handler"
 	"sultra-otomotif-api/internal/middleware"
@@ -17,16 +19,21 @@ import (
 )
 
 func main() {
+	// 1. Memuat Konfigurasi Aplikasi
 	cfg := config.LoadConfig()
+	if cfg.JWTSecretKey == "" || cfg.DBSource == "" || cfg.CloudinaryURL == "" || cfg.FrontendURL == "" {
+		log.Fatal("FATAL: Required environment variables are not set.")
+	}
 
+	// 2. Menghubungkan ke Database
 	db, err := pgxpool.New(context.Background(), cfg.DBSource)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		log.Fatalf("FATAL: Unable to connect to database: %v\n", err)
 	}
 	defer db.Close()
 	log.Println("Database connection successful")
 
-	// --- REPOSITORIES ---
+	// 3. Inisialisasi Semua Layer (Dependency Injection)
 	userRepository := repository.NewUserRepository(db)
 	vehicleRepository := repository.NewVehicleRepository(db)
 	imageRepository := repository.NewImageRepository(db)
@@ -35,7 +42,6 @@ func main() {
 	salesRepository := repository.NewSalesRepository(db)
 	chatRepository := repository.NewChatRepository(db)
 
-	// --- SERVICES ---
 	userService := service.NewUserService(userRepository)
 	vehicleService := service.NewVehicleService(vehicleRepository, imageRepository, userRepository)
 	bookingService := service.NewBookingService(bookingRepository, vehicleRepository)
@@ -44,7 +50,6 @@ func main() {
 	salesService := service.NewSalesService(salesRepository, vehicleRepository)
 	chatService := service.NewChatService(chatRepository, vehicleRepository)
 
-	// --- HANDLERS ---
 	userHandler := handler.NewUserHandler(userService, cfg.JWTSecretKey)
 	vehicleHandler := handler.NewVehicleHandler(vehicleService)
 	bookingHandler := handler.NewBookingHandler(bookingService)
@@ -56,64 +61,35 @@ func main() {
 	hub := websocket.NewHub(chatService)
 	go hub.Run()
 
+	// 4. Setup Router Gin
+	// Set GIN_MODE dari environment variable, default ke "debug"
+	ginMode := os.Getenv("GIN_MODE")
+	if ginMode == "" || ginMode == "debug" {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	router := gin.Default()
 
-	// CORS Configuration yang diperbaiki
+	// Konfigurasi CORS yang fleksibel
 	corsConfig := cors.Config{
-		AllowOrigins: []string{
-			"http://localhost:3000",
-			"http://127.0.0.1:3000",
-			"http://localhost:3001",
-			"http://127.0.0.1:3001",
-			// Tambahkan domain production jika ada
-			// "https://yourdomain.com",
-		},
-		AllowMethods: []string{
-			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD",
-		},
-		AllowHeaders: []string{
-			"Origin",
-			"Content-Type",
-			"Content-Length",
-			"Accept-Encoding",
-			"Authorization",
-			"Cache-Control",
-			"X-Requested-With",
-			"Accept",
-			"X-CSRF-Token",
-		},
-		ExposeHeaders: []string{
-			"Content-Length",
-			"Access-Control-Allow-Origin",
-			"Access-Control-Allow-Headers",
-			"Cache-Control",
-			"Content-Language",
-			"Content-Type",
-		},
+		AllowOrigins:     []string{cfg.FrontendURL, "http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
-		AllowWildcard:    false,
 		MaxAge:           12 * time.Hour,
 	}
-
-	// Terapkan CORS middleware
 	router.Use(cors.New(corsConfig))
-
-	// Tambahkan custom CORS handler untuk preflight requests
-	router.Use(func(c *gin.Context) {
-		if c.Request.Method == "OPTIONS" {
-			c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
-			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD")
-			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, Authorization, Cache-Control, X-Requested-With, Accept, X-CSRF-Token")
-			c.Header("Access-Control-Allow-Credentials", "true")
-			c.Header("Access-Control-Max-Age", "86400")
-			c.AbortWithStatus(204)
-			return
-		}
-		c.Next()
-	})
 
 	apiV1 := router.Group("/api/v1")
 
+	// Health Check Endpoint
+	apiV1.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "UP"})
+	})
+
+	// 5. Mendaftarkan Semua Rute API
 	setupAuthRoutes(apiV1, userHandler, cfg.JWTSecretKey)
 	setupVehicleRoutes(apiV1, vehicleHandler, cfg.JWTSecretKey)
 	setupBookingRoutes(apiV1, bookingHandler, cfg.JWTSecretKey)
@@ -123,19 +99,20 @@ func main() {
 	setupSalesRoutes(apiV1, salesHandler, cfg.JWTSecretKey)
 	setupChatRoutes(apiV1, chatHandler, cfg.JWTSecretKey)
 
-	// WebSocket endpoint dengan CORS handling
+	// Daftarkan Rute WebSocket
 	apiV1.GET("/ws", middleware.AuthMiddleware(cfg.JWTSecretKey), func(c *gin.Context) {
-		// Set CORS headers untuk WebSocket
-		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
-		c.Header("Access-Control-Allow-Credentials", "true")
 		handler.ServeWs(hub, c)
 	})
 
-	// Menjalankan Server
-	log.Printf("Server starting on port %s", cfg.AppPort)
-	err = router.Run(":" + cfg.AppPort)
+	// 6. Menjalankan Server
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = cfg.AppPort // Default ke 8080 untuk lokal
+	}
+	log.Printf("Server starting on port %s in %s mode", port, gin.Mode())
+	err = router.Run(":" + port)
 	if err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Fatalf("FATAL: Failed to start server: %v", err)
 	}
 }
 
