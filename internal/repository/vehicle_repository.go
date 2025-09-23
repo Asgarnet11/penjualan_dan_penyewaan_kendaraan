@@ -18,6 +18,7 @@ type VehicleRepository interface {
 	Update(ctx context.Context, vehicle model.Vehicle) (model.Vehicle, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 	FindAllAdmin(ctx context.Context) ([]model.Vehicle, error)
+	FindAllByOwnerID(ctx context.Context, ownerID uuid.UUID) ([]model.Vehicle, error)
 }
 
 // vehicleRepository adalah implementasi dari interface di atas
@@ -168,5 +169,36 @@ func (r *vehicleRepository) FindAllAdmin(ctx context.Context) ([]model.Vehicle, 
 		}
 		vehicles = append(vehicles, v)
 	}
+	return vehicles, nil
+}
+
+func (r *vehicleRepository) FindAllByOwnerID(ctx context.Context, ownerID uuid.UUID) ([]model.Vehicle, error) {
+	var vehicles []model.Vehicle
+	// Query ini mengambil semua field untuk ditampilkan di frontend.
+	query := `SELECT id, owner_id, brand, model, year, plate_number, color, vehicle_type, transmission, fuel, status, description, is_for_sale, sale_price, is_for_rent, rental_price_daily, rental_price_weekly, rental_price_monthly, created_at, updated_at 
+			  FROM vehicles 
+			  WHERE owner_id = $1 
+			  ORDER BY created_at DESC`
+
+	rows, err := r.db.Query(ctx, query, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var v model.Vehicle
+		err := rows.Scan(
+			&v.ID, &v.OwnerID, &v.Brand, &v.Model, &v.Year, &v.PlateNumber, &v.Color,
+			&v.VehicleType, &v.Transmission, &v.Fuel, &v.Status, &v.Description,
+			&v.IsForSale, &v.SalePrice, &v.IsForRent, &v.RentalPriceDaily,
+			&v.RentalPriceWeekly, &v.RentalPriceMonthly, &v.CreatedAt, &v.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		vehicles = append(vehicles, v)
+	}
+
 	return vehicles, nil
 }

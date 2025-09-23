@@ -21,6 +21,7 @@ type VehicleService interface {
 	UpdateVehicle(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID, input model.CreateVehicleInput) (model.Vehicle, error)
 	DeleteVehicle(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID) error
 	UploadImage(ctx context.Context, vehicleID, currentUserID uuid.UUID, file multipart.File) (string, error)
+	GetVehiclesByOwnerID(ctx context.Context, ownerID uuid.UUID) ([]model.Vehicle, error)
 }
 
 type vehicleService struct {
@@ -167,4 +168,8 @@ func (s *vehicleService) UploadImage(ctx context.Context, vehicleID, currentUser
 	}
 
 	return imageURL, nil
+}
+
+func (s *vehicleService) GetVehiclesByOwnerID(ctx context.Context, ownerID uuid.UUID) ([]model.Vehicle, error) {
+	return s.repo.FindAllByOwnerID(ctx, ownerID)
 }

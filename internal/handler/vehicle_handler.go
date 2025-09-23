@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"sultra-otomotif-api/internal/helper"
@@ -157,4 +158,28 @@ func (h *VehicleHandler) UploadVehicleImage(ctx *gin.Context) {
 
 	response := gin.H{"image_url": imageURL}
 	helper.APIResponse(ctx, "Image uploaded successfully", http.StatusOK, response)
+}
+
+func (h *VehicleHandler) GetMyListings(ctx *gin.Context) {
+	// Ambil ID pengguna (vendor) yang sedang login dari context yang di-set oleh middleware
+	currentUserID, exists := ctx.Get("currentUserID")
+	if !exists {
+		helper.ErrorResponse(ctx, "User ID not found in token", http.StatusUnauthorized, errors.New("unauthorized"))
+		return
+	}
+
+	ownerID, ok := currentUserID.(uuid.UUID)
+	if !ok {
+		helper.ErrorResponse(ctx, "Invalid user ID format", http.StatusInternalServerError, errors.New("internal server error"))
+		return
+	}
+
+	// Panggil service dengan ID pemilik
+	vehicles, err := h.vehicleService.GetVehiclesByOwnerID(ctx, ownerID)
+	if err != nil {
+		helper.ErrorResponse(ctx, "Failed to fetch listings", http.StatusInternalServerError, err)
+		return
+	}
+
+	helper.APIResponse(ctx, "Successfully fetched user listings", http.StatusOK, vehicles)
 }

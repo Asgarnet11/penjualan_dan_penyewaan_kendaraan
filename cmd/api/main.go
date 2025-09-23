@@ -12,13 +12,11 @@ import (
 	"time"
 
 	"github.com/gin-contrib/cors"
-
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-
 	cfg := config.LoadConfig()
 
 	db, err := pgxpool.New(context.Background(), cfg.DBSource)
@@ -45,6 +43,7 @@ func main() {
 	adminService := service.NewAdminService(userRepository, vehicleRepository)
 	salesService := service.NewSalesService(salesRepository, vehicleRepository)
 	chatService := service.NewChatService(chatRepository, vehicleRepository)
+
 	// --- HANDLERS ---
 	userHandler := handler.NewUserHandler(userService, cfg.JWTSecretKey)
 	vehicleHandler := handler.NewVehicleHandler(vehicleService)
@@ -58,15 +57,60 @@ func main() {
 	go hub.Run()
 
 	router := gin.Default()
-	config := cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+
+	// CORS Configuration yang diperbaiki
+	corsConfig := cors.Config{
+		AllowOrigins: []string{
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+			"http://localhost:3001",
+			"http://127.0.0.1:3001",
+			// Tambahkan domain production jika ada
+			// "https://yourdomain.com",
+		},
+		AllowMethods: []string{
+			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD",
+		},
+		AllowHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Content-Length",
+			"Accept-Encoding",
+			"Authorization",
+			"Cache-Control",
+			"X-Requested-With",
+			"Accept",
+			"X-CSRF-Token",
+		},
+		ExposeHeaders: []string{
+			"Content-Length",
+			"Access-Control-Allow-Origin",
+			"Access-Control-Allow-Headers",
+			"Cache-Control",
+			"Content-Language",
+			"Content-Type",
+		},
 		AllowCredentials: true,
+		AllowWildcard:    false,
 		MaxAge:           12 * time.Hour,
 	}
-	router.Use(cors.New(config))
+
+	// Terapkan CORS middleware
+	router.Use(cors.New(corsConfig))
+
+	// Tambahkan custom CORS handler untuk preflight requests
+	router.Use(func(c *gin.Context) {
+		if c.Request.Method == "OPTIONS" {
+			c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD")
+			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, Authorization, Cache-Control, X-Requested-With, Accept, X-CSRF-Token")
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Access-Control-Max-Age", "86400")
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
 
 	apiV1 := router.Group("/api/v1")
 
@@ -79,11 +123,15 @@ func main() {
 	setupSalesRoutes(apiV1, salesHandler, cfg.JWTSecretKey)
 	setupChatRoutes(apiV1, chatHandler, cfg.JWTSecretKey)
 
+	// WebSocket endpoint dengan CORS handling
 	apiV1.GET("/ws", middleware.AuthMiddleware(cfg.JWTSecretKey), func(c *gin.Context) {
+		// Set CORS headers untuk WebSocket
+		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
+		c.Header("Access-Control-Allow-Credentials", "true")
 		handler.ServeWs(hub, c)
 	})
 
-	// 6. Menjalankan Server
+	// Menjalankan Server
 	log.Printf("Server starting on port %s", cfg.AppPort)
 	err = router.Run(":" + cfg.AppPort)
 	if err != nil {
@@ -116,6 +164,7 @@ func setupVehicleRoutes(group *gin.RouterGroup, handler *handler.VehicleHandler,
 			protectedVendorRoutes.PUT("/:id", handler.UpdateVehicle)
 			protectedVendorRoutes.DELETE("/:id", handler.DeleteVehicle)
 			protectedVendorRoutes.POST("/:id/images", handler.UploadVehicleImage)
+			protectedVendorRoutes.GET("/my-listings", handler.GetMyListings)
 		}
 	}
 }
@@ -168,11 +217,11 @@ func setupAdminRoutes(group *gin.RouterGroup, handler *handler.AdminHandler, jwt
 		adminRoutes.GET("/vendors", handler.GetVendors)
 		adminRoutes.PATCH("/vendors/:id/verify", handler.VerifyVendor)
 
-		// Rute Manajemen User (BARU)
+		// Rute Manajemen User
 		adminRoutes.GET("/users", handler.GetAllUsers)
 		adminRoutes.DELETE("/users/:id", handler.DeleteUser)
 
-		// Rute Manajemen Listing (BARU)
+		// Rute Manajemen Listing
 		adminRoutes.GET("/vehicles", handler.GetAllVehicles)
 		adminRoutes.DELETE("/vehicles/:id", handler.DeleteVehicle)
 	}
