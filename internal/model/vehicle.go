@@ -25,6 +25,8 @@ type Vehicle struct {
 	RentalPriceDaily   float64   `json:"rental_price_daily"`
 	RentalPriceWeekly  float64   `json:"rental_price_weekly"`
 	RentalPriceMonthly float64   `json:"rental_price_monthly"`
+	Location           *string   `json:"location,omitempty"`
+	Features           []string  `json:"features,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
