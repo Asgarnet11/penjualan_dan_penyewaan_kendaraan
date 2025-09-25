@@ -41,12 +41,20 @@ func (s *salesService) InitiatePurchase(ctx context.Context, vehicleID, buyerID 
 		return model.SalesTransaction{}, errors.New("you cannot buy your own vehicle")
 	}
 
+	// PERBAIKAN DI SINI:
+	// Cek apakah harga jual tidak NULL sebelum digunakan
+	if vehicle.SalePrice == nil {
+		return model.SalesTransaction{}, errors.New("sale price for this vehicle is not set")
+	}
+	// Ambil nilai dari pointer
+	agreedPrice := *vehicle.SalePrice
+
 	newTransaction := model.SalesTransaction{
 		ID:          uuid.New(),
 		VehicleID:   vehicleID,
 		SellerID:    vehicle.OwnerID,
 		BuyerID:     buyerID,
-		AgreedPrice: vehicle.SalePrice,
+		AgreedPrice: agreedPrice, // Gunakan nilai yang sudah di-dereference
 		Status:      "payment_pending",
 	}
 
@@ -54,17 +62,14 @@ func (s *salesService) InitiatePurchase(ctx context.Context, vehicleID, buyerID 
 }
 
 func (s *salesService) ConfirmSale(ctx context.Context, transactionID uuid.UUID) error {
-	// 1. Update status transaksi penjualan menjadi 'completed'
-	// Kita butuh vehicle_id yang dikembalikan dari repository
 	transaction, err := s.salesRepo.UpdateStatus(ctx, transactionID, "completed")
 	if err != nil {
 		return err
 	}
 
-	// 2. KRUSIAL: Update status kendaraan menjadi 'sold'
 	vehicle, err := s.vehicleRepo.FindByID(ctx, transaction.VehicleID)
 	if err != nil {
-		return err // Harusnya tidak terjadi jika data konsisten
+		return err
 	}
 
 	vehicle.Status = "sold"

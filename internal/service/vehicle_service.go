@@ -10,9 +10,24 @@ import (
 
 	"github.com/cloudinary/cloudinary-go/v2"
 	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
-
 	"github.com/google/uuid"
 )
+
+// Helper function untuk membuat pointer dari string, mengembalikan nil jika string kosong
+func stringToPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// Helper function untuk membuat pointer dari float64, mengembalikan nil jika float64 adalah 0
+func float64ToPtr(f float64) *float64 {
+	if f == 0 {
+		return nil
+	}
+	return &f
+}
 
 type VehicleService interface {
 	CreateVehicle(ctx context.Context, input model.CreateVehicleInput, ownerID uuid.UUID) (model.Vehicle, error)
@@ -35,8 +50,7 @@ func NewVehicleService(repo repository.VehicleRepository, imageRepo repository.I
 }
 
 func (s *vehicleService) CreateVehicle(ctx context.Context, input model.CreateVehicleInput, ownerID uuid.UUID) (model.Vehicle, error) {
-
-	owner, err := s.userRepo.FindByID(ctx, ownerID) // Kita perlu fungsi FindByID di userRepo
+	owner, err := s.userRepo.FindByID(ctx, ownerID)
 	if err != nil {
 		return model.Vehicle{}, errors.New("owner not found")
 	}
@@ -45,35 +59,37 @@ func (s *vehicleService) CreateVehicle(ctx context.Context, input model.CreateVe
 	}
 
 	newVehicle := model.Vehicle{
-		ID:                 uuid.New(),
-		OwnerID:            ownerID, // Diambil dari token JWT
-		Brand:              input.Brand,
-		Model:              input.Model,
-		Year:               input.Year,
-		PlateNumber:        input.PlateNumber,
-		Color:              input.Color,
-		VehicleType:        input.VehicleType,
-		Transmission:       input.Transmission,
-		Fuel:               input.Fuel,
-		Status:             "available", // Status default saat dibuat
-		Description:        input.Description,
-		IsForSale:          input.IsForSale,
-		SalePrice:          input.SalePrice,
-		IsForRent:          input.IsForRent,
-		RentalPriceDaily:   input.RentalPriceDaily,
-		RentalPriceWeekly:  input.RentalPriceWeekly,
-		RentalPriceMonthly: input.RentalPriceMonthly,
+		ID:           uuid.New(),
+		OwnerID:      ownerID,
+		Brand:        input.Brand,
+		Model:        input.Model,
+		Year:         input.Year,
+		PlateNumber:  input.PlateNumber,
+		VehicleType:  input.VehicleType,
+		Transmission: input.Transmission,
+		Fuel:         input.Fuel,
+		Status:       "available",
+		IsForSale:    input.IsForSale,
+		IsForRent:    input.IsForRent,
+		Features:     input.Features,
+		// PERBAIKAN: Gunakan helper untuk mengisi field pointer
+		Color:              stringToPtr(input.Color),
+		Description:        stringToPtr(input.Description),
+		Location:           stringToPtr(input.Location),
+		SalePrice:          float64ToPtr(input.SalePrice),
+		RentalPriceDaily:   float64ToPtr(input.RentalPriceDaily),
+		RentalPriceWeekly:  float64ToPtr(input.RentalPriceWeekly),
+		RentalPriceMonthly: float64ToPtr(input.RentalPriceMonthly),
 	}
 
 	createdVehicle, err := s.repo.Create(ctx, newVehicle)
 	if err != nil {
 		return model.Vehicle{}, err
 	}
-
 	return createdVehicle, nil
 }
 
-func (s *vehicleService) GetAllVehicles(ctx context.Context, filter model.VehicleFilter) ([]model.Vehicle, error) { // <-- Gunakan model.VehicleFilter
+func (s *vehicleService) GetAllVehicles(ctx context.Context, filter model.VehicleFilter) ([]model.Vehicle, error) {
 	return s.repo.FindAll(ctx, filter)
 }
 
@@ -82,50 +98,48 @@ func (s *vehicleService) GetVehicleByID(ctx context.Context, id uuid.UUID) (mode
 }
 
 func (s *vehicleService) UpdateVehicle(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID, input model.CreateVehicleInput) (model.Vehicle, error) {
-	// PENTING: Cek dulu apakah kendaraan ini ada
 	vehicleToUpdate, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return model.Vehicle{}, errors.New("vehicle not found")
 	}
 
-	// PENTING: Validasi kepemilikan
 	if vehicleToUpdate.OwnerID != currentUserID {
 		return model.Vehicle{}, errors.New("forbidden: you are not the owner of this vehicle")
 	}
 
-	// Update field
 	vehicleToUpdate.Brand = input.Brand
 	vehicleToUpdate.Model = input.Model
 	vehicleToUpdate.Year = input.Year
 	vehicleToUpdate.PlateNumber = input.PlateNumber
-	vehicleToUpdate.Color = input.Color
 	vehicleToUpdate.VehicleType = input.VehicleType
 	vehicleToUpdate.Transmission = input.Transmission
 	vehicleToUpdate.Fuel = input.Fuel
-	vehicleToUpdate.Description = input.Description
 	vehicleToUpdate.IsForSale = input.IsForSale
-	vehicleToUpdate.SalePrice = input.SalePrice
 	vehicleToUpdate.IsForRent = input.IsForRent
-	vehicleToUpdate.RentalPriceDaily = input.RentalPriceDaily
-	vehicleToUpdate.RentalPriceWeekly = input.RentalPriceWeekly
-	vehicleToUpdate.RentalPriceMonthly = input.RentalPriceMonthly
+	vehicleToUpdate.Features = input.Features
+
+	// PERBAIKAN: Gunakan helper untuk memperbarui field pointer
+	vehicleToUpdate.Color = stringToPtr(input.Color)
+	vehicleToUpdate.Description = stringToPtr(input.Description)
+	vehicleToUpdate.Location = stringToPtr(input.Location)
+	vehicleToUpdate.SalePrice = float64ToPtr(input.SalePrice)
+	vehicleToUpdate.RentalPriceDaily = float64ToPtr(input.RentalPriceDaily)
+	vehicleToUpdate.RentalPriceWeekly = float64ToPtr(input.RentalPriceWeekly)
+	vehicleToUpdate.RentalPriceMonthly = float64ToPtr(input.RentalPriceMonthly)
 
 	updatedVehicle, err := s.repo.Update(ctx, vehicleToUpdate)
 	if err != nil {
 		return model.Vehicle{}, err
 	}
-
 	return updatedVehicle, nil
 }
 
 func (s *vehicleService) DeleteVehicle(ctx context.Context, id uuid.UUID, currentUserID uuid.UUID) error {
-	// PENTING: Cek dulu apakah kendaraan ini ada
 	vehicleToDelete, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return errors.New("vehicle not found")
 	}
 
-	// PENTING: Validasi kepemilikan
 	if vehicleToDelete.OwnerID != currentUserID {
 		return errors.New("forbidden: you are not the owner of this vehicle")
 	}
@@ -134,7 +148,6 @@ func (s *vehicleService) DeleteVehicle(ctx context.Context, id uuid.UUID, curren
 }
 
 func (s *vehicleService) UploadImage(ctx context.Context, vehicleID, currentUserID uuid.UUID, file multipart.File) (string, error) {
-	// 1. Validasi kepemilikan (sama seperti sebelumnya)
 	vehicle, err := s.repo.FindByID(ctx, vehicleID)
 	if err != nil {
 		return "", errors.New("vehicle not found")
@@ -143,25 +156,20 @@ func (s *vehicleService) UploadImage(ctx context.Context, vehicleID, currentUser
 		return "", errors.New("forbidden: you are not the owner of this vehicle")
 	}
 
-	// 2. Setup koneksi ke Cloudinary
-	cfg := config.LoadConfig() // Muat config untuk mendapatkan URL
+	cfg := config.LoadConfig()
 	cld, err := cloudinary.NewFromURL(cfg.CloudinaryURL)
 	if err != nil {
 		return "", errors.New("failed to connect to cloudinary")
 	}
 
-	// 3. Lakukan proses upload
 	uploadResult, err := cld.Upload.Upload(ctx, file, uploader.UploadParams{
-		Folder: "sultra-otomotif", // Tentukan folder di Cloudinary
+		Folder: "sultra-otomotif",
 	})
 	if err != nil {
 		return "", errors.New("failed to upload image to cloudinary")
 	}
 
-	// 4. Dapatkan URL gambar yang aman
 	imageURL := uploadResult.SecureURL
-
-	// 5. Simpan URL ke database (sama seperti sebelumnya)
 	err = s.imageRepo.SaveVehicleImage(ctx, vehicleID, imageURL)
 	if err != nil {
 		return "", err

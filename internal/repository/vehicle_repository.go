@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strings"
-
 	"sultra-otomotif-api/internal/model"
 
 	"github.com/google/uuid"
@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// vehicleWithImagesQuery adalah bagian query utama yang digunakan berulang kali.
-// Ini mengambil semua detail kendaraan dan menggabungkan gambar-gambarnya menjadi satu field JSON.
 const vehicleWithImagesQuery = `
 	SELECT 
 		v.id, v.owner_id, v.brand, v.model, v.year, v.plate_number, v.color, 
@@ -28,7 +26,6 @@ const vehicleWithImagesQuery = `
 	FROM vehicles v
 `
 
-// scanVehicle adalah fungsi helper untuk memindai hasil query ke dalam struct Vehicle.
 func scanVehicle(row pgx.Row, v *model.Vehicle) error {
 	return row.Scan(
 		&v.ID, &v.OwnerID, &v.Brand, &v.Model, &v.Year, &v.PlateNumber, &v.Color,
@@ -75,16 +72,40 @@ func (r *vehicleRepository) FindAll(ctx context.Context, filter model.VehicleFil
 
 	conditions := []string{"v.status = 'available'"}
 	args := []interface{}{}
-	// Logika filter dinamis...
-	if filter.Type != "" { /* ... */
+	argID := 1
+
+	if filter.Type != "" {
+		conditions = append(conditions, fmt.Sprintf("v.vehicle_type = $%d", argID))
+		args = append(args, filter.Type)
+		argID++
 	}
-	// ...tambahkan semua logika filter lainnya di sini...
+	if filter.Brand != "" {
+		conditions = append(conditions, fmt.Sprintf("v.brand ILIKE $%d", argID))
+		args = append(args, "%"+filter.Brand+"%")
+		argID++
+	}
+	if filter.Transmission != "" {
+		conditions = append(conditions, fmt.Sprintf("v.transmission = $%d", argID))
+		args = append(args, filter.Transmission)
+		argID++
+	}
+	// ... tambahkan logika filter lain di sini jika perlu ...
 
 	finalQuery := vehicleWithImagesQuery
 	if len(conditions) > 0 {
 		finalQuery += " WHERE " + strings.Join(conditions, " AND ")
 	}
-	finalQuery += " ORDER BY v.created_at DESC" // Urutan default
+
+	orderBy := " ORDER BY v.created_at DESC"
+	switch filter.Sort {
+	case "price_asc":
+		orderBy = " ORDER BY v.sale_price ASC NULLS LAST"
+	case "price_desc":
+		orderBy = " ORDER BY v.sale_price DESC NULLS LAST"
+	case "year_desc":
+		orderBy = " ORDER BY v.year DESC"
+	}
+	finalQuery += orderBy
 
 	rows, err := r.db.Query(ctx, finalQuery, args...)
 	if err != nil {
@@ -107,8 +128,8 @@ func (r *vehicleRepository) FindByID(ctx context.Context, id uuid.UUID) (model.V
 	var v model.Vehicle
 	query := vehicleWithImagesQuery + " WHERE v.id = $1"
 
-	err := scanVehicle(r.db.QueryRow(ctx, query, id), &v)
-	if err != nil {
+	row := r.db.QueryRow(ctx, query, id)
+	if err := scanVehicle(row, &v); err != nil {
 		return model.Vehicle{}, err
 	}
 	return v, nil
