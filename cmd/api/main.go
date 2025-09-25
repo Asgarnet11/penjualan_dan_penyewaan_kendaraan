@@ -73,7 +73,7 @@ func main() {
 
 	// Konfigurasi CORS yang fleksibel
 	corsConfig := cors.Config{
-		AllowOrigins:     []string{cfg.FrontendURL, "http://localhost:3000"},
+		AllowOrigins:     []string{cfg.FrontendURL, "https://penjualan-dan-penyewaan-kendaraan-f.vercel.app/"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
